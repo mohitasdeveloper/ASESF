@@ -183,6 +183,8 @@ CREATE TABLE public.master_timetable (
     course_id UUID NOT NULL,
     subject_id UUID NOT NULL,
     faculty_id UUID NOT NULL,
+    virtual_start_time TIME WITHOUT TIME ZONE, -- set only for flexible/no-fixed-slot "Virtual" lectures
+    virtual_end_time TIME WITHOUT TIME ZONE,
     is_active BOOLEAN DEFAULT true,
     CONSTRAINT master_timetable_pkey PRIMARY KEY (id),
     CONSTRAINT master_timetable_time_slot_id_fkey FOREIGN KEY (time_slot_id) REFERENCES public.time_slots(id),
@@ -222,6 +224,8 @@ CREATE TABLE public.daily_schedule (
     subject_id UUID NOT NULL,
     assigned_faculty_id UUID NOT NULL,
     original_faculty_id UUID,
+    virtual_start_time TIME WITHOUT TIME ZONE, -- set only for flexible/no-fixed-slot "Virtual" lectures
+    virtual_end_time TIME WITHOUT TIME ZONE,
     is_cancelled BOOLEAN DEFAULT false,
     cancel_reason TEXT,
     is_rescheduled BOOLEAN DEFAULT false,
@@ -328,6 +332,16 @@ ALTER TABLE public.faculty_remarks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
 
 -- Base RLS Pass-Through Policies
+
+-- Own-profile lookup: getSession()/whoami query this on every page load and
+-- after every login, so without this policy RLS silently hides the row and
+-- the app treats a real admin as "Account profile not found or inactive".
+CREATE POLICY "Allow public read access for authenticated users" ON public.admin_users FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Allow full access for administrators" ON public.admin_users FOR ALL USING (public.is_admin());
+
+CREATE POLICY "Allow public read access for authenticated users" ON public.course_subject_faculty FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Allow full access for administrators" ON public.course_subject_faculty FOR ALL USING (public.is_admin());
+
 CREATE POLICY "Allow public read access for authenticated users" ON public.rooms FOR SELECT USING (auth.role() = 'authenticated');
 CREATE POLICY "Allow full access for administrators" ON public.rooms FOR ALL USING (public.is_admin());
 
