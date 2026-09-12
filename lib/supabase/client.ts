@@ -1,6 +1,7 @@
 'use client';
 
 import { createBrowserClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { DEPT_COOKIE, type Dept, getDeptConfig, resolveDept } from './departments';
 
 /**
@@ -41,7 +42,26 @@ export function setDept(dept: Dept): boolean {
   return changed;
 }
 
+// @supabase/ssr's createBrowserClient() caches ONE client globally per tab
+// (its `isSingleton` option, on by default) and ignores the url/anonKey on
+// every call after the first. That's fine for a single-project app, but
+// here it means: sign in to DMMC, then switch to DMS in the same tab
+// without a full reload, and every later createClient('DMS') silently
+// hands back the *already-cached DMMC client* — so sign-in quietly hits
+// the wrong project's auth server, the DMS session never actually gets
+// set, and /api/whoami (correctly checking DMS via the ases_dept cookie)
+// reports "Account profile not found or inactive" even though the row is
+// fine. A full refresh "fixes" it only because it wipes this in-memory
+// cache. We keep our own cache instead — one real client per department —
+// and disable the library's own singleton so it can't override it.
+const clientsByDept = new Map<Dept, SupabaseClient>();
+
 export function createClient(dept: Dept = getDept()) {
+  const cached = clientsByDept.get(dept);
+  if (cached) return cached;
+
   const { url, anonKey } = getDeptConfig(dept);
-  return createBrowserClient(url, anonKey);
+  const client = createBrowserClient(url, anonKey, { isSingleton: false });
+  clientsByDept.set(dept, client);
+  return client;
 }
